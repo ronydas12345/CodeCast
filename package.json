@@ -5,7 +5,9 @@
   "description": "A small real-time code sharing demo in the style of codeshare.io.",
   "type": "module",
   "scripts": {
+    "dev": "node server.js",
     "start": "node server.js",
+    "build": "vite build",
     "check": "node scripts/sync-check.mjs"
   },
   "engines": {

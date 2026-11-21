@@ -3,15 +3,21 @@ import { isRoomCode, makeRoomCode, parseRoomInput, readRecent } from "./codes.js
 const app = document.querySelector("#app")
 const match = location.pathname.match(/^\/([a-z0-9]{6})\/?$/)
 
-if (location.pathname === "/") {
-  document.title = "CodeCast"
-  mountHome(app)
-} else if (match && isRoomCode(match[1])) {
-  document.body.classList.add("is-room")
-  document.title = `${match[1]} · CodeCast`
-  const { mountRoom } = await import("./room.js")
-  mountRoom(app, match[1])
-} else {
+boot()
+
+async function boot() {
+  if (location.pathname === "/") {
+    document.title = "CodeCast"
+    mountHome(app)
+    return
+  }
+  if (match && isRoomCode(match[1])) {
+    document.body.classList.add("is-room")
+    document.title = `${match[1]} · CodeCast`
+    const { mountRoom } = await import("./room.js")
+    mountRoom(app, match[1])
+    return
+  }
   document.title = "Not found · CodeCast"
   mountMissing(app)
 }

@@ -364,39 +364,60 @@ const httpServer = createServer(app)
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" })
 wss.on("connection", attachSocket)
 
-const { createServer: createViteServer } = await import("vite")
-const vite = await createViteServer({
-  root,
-  appType: "custom",
-  clearScreen: false,
-  server: {
-    middlewareMode: true,
-    hmr: { server: httpServer },
-  },
-})
+const onVercel = Boolean(process.env.VERCEL)
+const distDir = path.join(root, "dist")
+const useViteDev = !onVercel && process.env.NODE_ENV !== "production"
 
-app.use(vite.middlewares)
-
-app.use(async (req, res, next) => {
+async function sendPage(req, res, next, vite) {
   if (req.method !== "GET" && req.method !== "HEAD") return next()
   const pathname = decodeURIComponent(req.path).replace(/\/+$/, "") || "/"
   if (pathname !== "/" && !/^\/[a-z0-9]{6}$/.test(pathname)) return next()
   try {
-    const templatePath = path.join(root, "index.html")
-    let html = await fs.readFile(templatePath, "utf8")
-    html = await vite.transformIndexHtml(req.originalUrl, html)
-    res.status(200).set({ "Content-Type": "text/html" }).end(html)
+    if (vite) {
+      const templatePath = path.join(root, "index.html")
+      let html = await fs.readFile(templatePath, "utf8")
+      html = await vite.transformIndexHtml(req.originalUrl, html)
+      res.status(200).set({ "Content-Type": "text/html" }).end(html)
+      return
+    }
+    res.sendFile(path.join(distDir, "index.html"))
   } catch (error) {
-    vite.ssrFixStacktrace(error)
+    if (vite) vite.ssrFixStacktrace(error)
     next(error)
   }
-})
+}
 
-app.use((req, res) => {
-  res.status(404).type("text/plain").send("Not found")
-})
+async function boot() {
+  if (useViteDev) {
+    const { createServer: createViteServer } = await import("vite")
+    const vite = await createViteServer({
+      root,
+      appType: "custom",
+      clearScreen: false,
+      server: {
+        middlewareMode: true,
+        hmr: { server: httpServer },
+      },
+    })
+    app.use(vite.middlewares)
+    app.use((req, res, next) => sendPage(req, res, next, vite))
+  } else {
+    app.use(express.static(distDir, { index: false, fallthrough: true }))
+    app.use((req, res, next) => sendPage(req, res, next, null))
+  }
 
-const port = Number(process.env.PORT) || 3000
-httpServer.listen(port, () => {
-  console.log(`CodeCast demo at http://localhost:${port}`)
-})
+  app.use((req, res) => {
+    res.status(404).type("text/plain").send("Not found")
+  })
+
+  if (!onVercel) {
+    const port = Number(process.env.PORT) || 3000
+    httpServer.listen(port, () => {
+      console.log(`CodeCast demo at http://localhost:${port}`)
+    })
+  }
+}
+
+await boot()
+
+export default httpServer
